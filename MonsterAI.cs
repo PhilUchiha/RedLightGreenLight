@@ -39,6 +39,11 @@ public class MonsterAI : MonoBehaviour
     {
       navMeshAgent.isStopped = lightController.isGreen;
 
+      if (animator != null)
+      {
+        animator.speed = lightController.isGreen ? 0f : 1f;
+      }
+
       if (!lightController.isGreen)
         navMeshAgent.SetDestination(player.transform.position);
     }
@@ -46,7 +51,6 @@ public class MonsterAI : MonoBehaviour
     if (isWalking)
     {
       navMeshAgent.SetDestination(player.transform.position);
-
       footstepTimer -= Time.deltaTime;
       if (footstepTimer <= 0f && footsteps != null)
       {
