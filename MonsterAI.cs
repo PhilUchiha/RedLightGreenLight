@@ -1,58 +1,123 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 public class MonsterAI : MonoBehaviour
 {
   public LightController lightController;
   public GameObject player;
-  public UnityEngine.AI.NavMeshAgent navMeshAgent;
+  public NavMeshAgent navMeshAgent;
   private Animator animator;
-
   public MonsterFootsteps footsteps;
 
-  private bool wasGreenLastFrame = true;
+  [Header("Patrol Settings")]
+  public Transform[] patrolPoints;
+  private int currentPatrolIndex = 0;
+
+  [Header("Detection Settings")]
+  public float viewDistance = 15f;
+  public float viewAngle = 60f;
+  public LayerMask obstructionMask;
+
+  private bool playerInSight = false;
 
   private float footstepTimer = 0f;
   public float footstepInterval = 0.5f;
 
+  private enum State { Patrolling, Chasing }
+  private State currentState = State.Patrolling;
+
   private void Start()
   {
     if (navMeshAgent == null)
-      navMeshAgent = GetComponent<UnityEngine.AI.NavMeshAgent>();
+      navMeshAgent = GetComponent<NavMeshAgent>();
 
     animator = GetComponentInChildren<Animator>();
-
     if (footsteps == null)
       footsteps = GetComponent<MonsterFootsteps>();
+
+    if (patrolPoints.Length > 0)
+      navMeshAgent.SetDestination(patrolPoints[0].position);
   }
 
   private void Update()
   {
-    if (lightController == null || navMeshAgent == null || player == null)
-      return;
+    if (lightController == null || navMeshAgent == null || player == null) return;
 
-    bool isWalking = !lightController.isGreen && !navMeshAgent.isStopped;
+    DetectPlayer();
 
-    if (animator != null)
-      animator.SetBool("isWalking", isWalking);
-
-    if (lightController.isGreen != wasGreenLastFrame)
+    if (lightController.isGreen)
     {
-      navMeshAgent.isStopped = lightController.isGreen;
+      // Freeze movement
+      navMeshAgent.isStopped = true;
 
-      if (animator != null)
-      {
-        animator.speed = lightController.isGreen ? 0f : 1f;
-      }
+      // Freeze animation on last frame (but only if it has started moving)
+      if (animator != null && animator.GetCurrentAnimatorStateInfo(0).length > 0)
+        animator.speed = 0f;
 
-      if (!lightController.isGreen)
-        navMeshAgent.SetDestination(player.transform.position);
+      return;
+    }
+    else
+    {
+      navMeshAgent.isStopped = false;
+      if (animator != null) animator.speed = 1f;
     }
 
-    if (isWalking)
+    switch (currentState)
     {
-      navMeshAgent.SetDestination(player.transform.position);
+      case State.Patrolling:
+        Patrol();
+        if (playerInSight) currentState = State.Chasing;
+        break;
+
+      case State.Chasing:
+        ChasePlayer();
+        if (!playerInSight) currentState = State.Patrolling;
+        break;
+    }
+
+    HandleFootsteps();
+  }
+
+  private void Patrol()
+  {
+    if (!navMeshAgent.pathPending && navMeshAgent.remainingDistance < 0.5f && patrolPoints.Length > 0)
+    {
+      currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
+      navMeshAgent.SetDestination(patrolPoints[currentPatrolIndex].position);
+    }
+
+    animator?.SetBool("isWalking", true);
+  }
+
+  private void ChasePlayer()
+  {
+    navMeshAgent.SetDestination(player.transform.position);
+    animator?.SetBool("isWalking", true);
+  }
+
+  private void DetectPlayer()
+  {
+    playerInSight = false;
+    Vector3 dirToPlayer = (player.transform.position - transform.position).normalized;
+
+    if (Vector3.Distance(transform.position, player.transform.position) < viewDistance)
+    {
+      if (Vector3.Angle(transform.forward, dirToPlayer) < viewAngle / 2f)
+      {
+        if (!Physics.Linecast(transform.position, player.transform.position, obstructionMask))
+        {
+          playerInSight = true;
+        }
+      }
+    }
+  }
+
+  private void HandleFootsteps()
+  {
+    if (!navMeshAgent.isStopped && navMeshAgent.velocity.magnitude > 0.1f && footsteps != null)
+    {
       footstepTimer -= Time.deltaTime;
-      if (footstepTimer <= 0f && footsteps != null)
+      if (footstepTimer <= 0f)
       {
         footsteps.PlayFootstep();
         footstepTimer = footstepInterval;
@@ -62,7 +127,5 @@ public class MonsterAI : MonoBehaviour
     {
       footstepTimer = 0f;
     }
-
-    wasGreenLastFrame = lightController.isGreen;
   }
 }

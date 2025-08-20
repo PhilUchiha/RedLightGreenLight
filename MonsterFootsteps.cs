@@ -14,6 +14,12 @@ public class MonsterFootsteps : MonoBehaviour
   {
     if (audioSource == null)
       audioSource = GetComponent<AudioSource>();
+
+    // Ensure 3D audio is enabled
+    audioSource.spatialBlend = 1f; // fully 3D
+    audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+    audioSource.minDistance = 1f;
+    audioSource.maxDistance = 25f;
   }
 
   public void PlayFootstep()
